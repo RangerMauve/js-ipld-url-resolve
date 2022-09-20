@@ -1,0 +1,37 @@
+{
+  "name": "js-ipld-url-resolve",
+  "version": "1.0.0",
+  "description": "Resolver for IPLD URLs based on the js-IPFS DAG API. supports advanced features like schemas and escaping",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "node test.js",
+    "lint": "standard --fix"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RangerMauve/js-ipld-url-resolve.git"
+  },
+  "keywords": [
+    "ipld",
+    "url",
+    "resolve"
+  ],
+  "author": "rangermauve <ranger@mauve.moe> (https://mauve.moe/)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/RangerMauve/js-ipld-url-resolve/issues"
+  },
+  "homepage": "https://github.com/RangerMauve/js-ipld-url-resolve#readme",
+  "dependencies": {
+    "@ipld/printify": "^0.1.0",
+    "@ipld/schema": "^4.1.0",
+    "js-ipld-url": "^1.0.2",
+    "multiformats": "^9.7.1"
+  },
+  "devDependencies": {
+    "ipfs-core": "^0.16.0",
+    "standard": "^17.0.0",
+    "tape": "^5.6.0"
+  }
+}

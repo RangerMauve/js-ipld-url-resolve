@@ -8,7 +8,7 @@ import { base36 } from 'multiformats/bases/base36'
 
 export const DEFAULT_CID_BASES = base32.decoder.or(base36.decoder)
 
-export default class IPLDURLSystem {
+export class IPLDURLSystem {
   constructor ({
     getNode,
     adls = new Map(),

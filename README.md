@@ -18,7 +18,7 @@ Resolver for IPLD URLs based on the js-IPFS DAG API. supports advanced features 
 ## API
 
 ```javascript
-import IPLDURLSystem from 'js-ipld-url-resolve'
+import { IPLDURLSystem } from 'js-ipld-url-resolve'
 
 // You map provide an optional map of ADLs to use
 const adls = new Map()

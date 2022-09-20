@@ -1,4 +1,4 @@
-import IPLDURLSystem from './index.js'
+import {IPLDURLSystem} from './index.js'
 
 import { create } from 'ipfs-core'
 import { fromDSL } from '@ipld/schema/from-dsl.js'

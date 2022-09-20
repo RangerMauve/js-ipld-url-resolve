@@ -151,9 +151,9 @@ test('Preserve schema type when traversing Links', async (t) => {
 test('Traverse segments with / in the name', async (t) => {
   const system = new IPLDURLSystem({ getNode })
 
-  const weirdPath = "hello/world"
+  const weirdPath = 'hello/world'
   const cid = await put({
-    [weirdPath]: "Fancy!"
+    [weirdPath]: 'Fancy!'
   })
 
   const url = `ipld://${cid}/${encodeURIComponent(weirdPath)}/`

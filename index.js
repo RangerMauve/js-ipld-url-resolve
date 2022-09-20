@@ -2,6 +2,7 @@ import { IPLDURL } from 'js-ipld-url'
 import { create as createTyped } from '@ipld/schema/typed.js'
 import { toDSL } from '@ipld/schema/to-dsl.js'
 import { CID } from 'multiformats/cid'
+import printify from '@ipld/printify'
 import { base32 } from 'multiformats/bases/base32'
 import { base36 } from 'multiformats/bases/base36'
 
@@ -13,7 +14,7 @@ export default class IPLDURLSystem {
     adls = new Map(),
     cidBases = DEFAULT_CID_BASES
   }) {
-    if(!getNode) throw new TypeError('Must provide a getNode function')
+    if (!getNode) throw new TypeError('Must provide a getNode function')
     this.getNode = getNode
     this.adls = adls
     this.cidBases = cidBases
@@ -41,7 +42,6 @@ export default class IPLDURLSystem {
       data = await this.#applyParameters(data, initialParameters)
     }
 
-    // TODO: Account for dag-pb?
     for (const { name, parameters } of segments) {
       // This does enables ADLs to return promises for properties
       data = await data[name]
@@ -86,45 +86,78 @@ export async function SchemaADL (node, { schema, type }, system) {
 
   const schemaCID = CID.parse(schema, system.cidBases)
   const schemaDMT = await system.getNode(schemaCID)
-  const converted = makeTyped(node, schemaDMT, type)
-
-  const typeDMT = schemaDMT.types[type]
-
-  const typedFields = new Map()
-  if (typeDMT.struct) {
-    for (const [name, fieldDMT] of Object.entries(typeDMT.struct.fields)) {
-      const nestedType = fieldDMT.type?.link?.expectedType
-      typedFields.set(name, nestedType)
-    }
-  }
-
-  if (typedFields.size) {
-    const trapped = new Proxy(converted, {
-      async get (target, property) {
-        const value = target[property]
-        if (!typedFields.has(property)) return value
-        const asCID = CID.asCID(value)
-        if (!asCID) return value
-        // Resolve the CID to the Node
-        const resolved = await system.getNode(asCID)
-        return makeTyped(resolved, schemaDMT, typedFields.get(property))
-      }
-    })
-    return trapped
-  }
-
-  // TODO: Add a trap to convert linked properties to their type, if there are subfields that are links
+  const converted = makeTyped(node, schemaDMT, type, system)
 
   return converted
 }
 
-export function makeTyped (node, schemaDMT, type) {
+function makeTyped (node, schemaDMT, type, system) {
   const typedSchema = createTyped(schemaDMT, type)
   const converted = typedSchema.toTyped(node)
+
   if (!converted) {
-    const dataView = JSON.stringify(node)
+    const dataView = printify(node)
     const schemaDSL = toDSL(schemaDMT)
-    throw new Error(`Data did not match schema\nData: ${dataView}\nSchema:${schemaDSL}`)
+    throw new Error(`Data did not match schema\nData: ${dataView}\nSchema: ${schemaDSL}`)
   }
+
+  const typeDMT = schemaDMT.types[type]
+
+  // TODO: Account for union types and deeply nested links in structs
+  if (typeDMT.struct) {
+    const trapped = new Proxy(converted, {
+      get (target, property) {
+        const value = target[property]
+        const propertySchema = typeDMT.struct.fields[property]
+        const expectedType = propertySchema?.type?.link?.expectedType
+        if (!expectedType) return value
+        const asCID = CID.asCID(value)
+        if (!asCID) return value
+        return system.getNode(asCID).then((resolved) => {
+          return makeTyped(resolved, schemaDMT, expectedType, system)
+        })
+      }
+    })
+    return trapped
+  } else if (typeDMT.map) {
+    let valueType = typeDMT.map.valueType
+    if (typeof valueType === 'string') {
+      valueType = schemaDMT.types[valueType]
+    }
+    if (valueType?.link?.expectedType) {
+      const expectedType = valueType.link.expectedType
+      const trapped = new Proxy(converted, {
+        get (target, property) {
+          const value = target[property]
+          const asCID = CID.asCID(value)
+          if (!asCID) return value
+          return system.getNode(asCID).then((resolved) => {
+            return makeTyped(resolved, schemaDMT, expectedType, system)
+          })
+        }
+      })
+      return trapped
+    }
+  } else if (typeDMT.list) {
+    let valueType = typeDMT.map.valueType
+    if (typeof valueType === 'string') {
+      valueType = schemaDMT.types[valueType]
+    }
+    if (valueType?.link?.expectedType) {
+      const expectedType = valueType.link.expectedType
+      const trapped = new Proxy(converted, {
+        get (target, property) {
+          const value = target[property]
+          const asCID = CID.asCID(value)
+          if (!asCID) return value
+          return system.getNode(asCID).then((resolved) => {
+            return makeTyped(resolved, schemaDMT, expectedType, system)
+          })
+        }
+      })
+      return trapped
+    }
+  }
+
   return converted
 }

@@ -7,6 +7,12 @@ Resolver for IPLD URLs based on the js-IPFS DAG API. supports advanced features 
 - Support special character escaping in path segments (e.g. '/')
 - Support for IPLD URL path segment parameter syntax `using ;`
 - Support IPLD Schemas as lenses during traversal
+- Resolve Links during traversal of schemas
+	- [x] Struct fields
+	- [x] Map values
+	- [x] List values
+	- [ ] Union types
+	- [ ] Links deeply nested within structs/maps
 - ADL Registry for `schema` parameter to convert nodes
 
 ## API

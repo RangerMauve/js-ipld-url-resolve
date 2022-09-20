@@ -24,6 +24,7 @@
   },
   "homepage": "https://github.com/RangerMauve/js-ipld-url-resolve#readme",
   "dependencies": {
+    "@ipld/printify": "^0.1.0",
     "@ipld/schema": "^4.1.0",
     "js-ipld-url": "^1.0.2",
     "multiformats": "^9.7.1"

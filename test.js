@@ -1,4 +1,4 @@
-import {IPLDURLSystem} from './index.js'
+import { IPLDURLSystem } from './index.js'
 
 import { create } from 'ipfs-core'
 import { fromDSL } from '@ipld/schema/from-dsl.js'
@@ -22,7 +22,7 @@ test.onFinish(() => {
 })
 
 test('Load simple value from URL', async (t) => {
-  const system = new IPLDURLSystem({ getNode })
+  const system = new IPLDURLSystem({ getNode, saveNode })
   const cid = await put({ hello: 'world' })
   const url = `ipld://${cid}/hello`
 
@@ -32,7 +32,7 @@ test('Load simple value from URL', async (t) => {
 })
 
 test('Interpret root data via schema type', async (t) => {
-  const system = new IPLDURLSystem({ getNode })
+  const system = new IPLDURLSystem({ getNode, saveNode })
   const schemaCID = await addSchema(`
     type Example {String:String} representation listpairs
   `)
@@ -51,7 +51,7 @@ test('Interpret root data via schema type', async (t) => {
 })
 
 test('Interpret nested data via schema type', async (t) => {
-  const system = new IPLDURLSystem({ getNode })
+  const system = new IPLDURLSystem({ getNode, saveNode })
   const schemaCID = await addSchema(`
     type Example {String:String} representation listpairs
   `)
@@ -72,7 +72,7 @@ test('Interpret nested data via schema type', async (t) => {
 })
 
 test('Apply schema for sub-nodes during pathing', async (t) => {
-  const system = new IPLDURLSystem({ getNode })
+  const system = new IPLDURLSystem({ getNode, saveNode })
   const schemaCID = await addSchema(`
     type Example struct {
       Hello String
@@ -97,7 +97,7 @@ test('Apply schema for sub-nodes during pathing', async (t) => {
 })
 
 test('Traverse over links', async (t) => {
-  const system = new IPLDURLSystem({ getNode })
+  const system = new IPLDURLSystem({ getNode, saveNode })
 
   const cid1 = await put('Hello, World?')
   const cid2 = await put({
@@ -123,7 +123,7 @@ test('Traverse over links', async (t) => {
 })
 
 test('Preserve schema type when traversing Links', async (t) => {
-  const system = new IPLDURLSystem({ getNode })
+  const system = new IPLDURLSystem({ getNode, saveNode })
 
   const schemaCID = await addSchema(`
     type Example struct {
@@ -149,7 +149,7 @@ test('Preserve schema type when traversing Links', async (t) => {
 })
 
 test('Traverse segments with / in the name', async (t) => {
-  const system = new IPLDURLSystem({ getNode })
+  const system = new IPLDURLSystem({ getNode, saveNode })
 
   const weirdPath = 'hello/world'
   const cid = await put({
@@ -161,6 +161,70 @@ test('Traverse segments with / in the name', async (t) => {
   const resolved = await system.resolve(url)
 
   t.equal(resolved, 'Fancy!', 'Resolved data at nested path')
+})
+
+test('Patch, add and move on root', async (t) => {
+  const cid = await put({
+    hello: ['world']
+  })
+
+  const patches = [
+    { op: 'add', path: '/hello/0', value: 'cruel' },
+    { op: 'move', path: '/goodbye', from: '/hello' }
+  ]
+
+  const url = `ipld://${cid}/`
+
+  const system = new IPLDURLSystem({ getNode, saveNode })
+
+  const updatedURL = await system.patch(url, patches)
+
+  // It's determenistic! 🤯
+  const expectedURL = 'ipld://bafyreiaigmnxp4ehbvt4nptoof2w7dixyanblnq3lfvxslulsrzkcpk3ni/'
+
+  t.equal(updatedURL, expectedURL, 'Got expected result URL')
+
+  const resolved = await system.resolve(updatedURL)
+
+  const expected = {
+    goodbye: ['cruel', 'world']
+  }
+
+  t.deepEqual(resolved, expected, 'Got expected structure')
+})
+
+test('Patch accross Link boundry', async (t) => {
+  const cid1 = await put({
+    hello: ['world']
+  })
+
+  const cid2 = await put({
+    example: cid1
+  })
+
+  const patches = [
+    { op: 'add', path: '/example/hello/0', value: 'cruel' },
+    { op: 'move', path: '/example/goodbye', from: '/example/hello' }
+  ]
+
+  const url = `ipld://${cid2}/`
+
+  const system = new IPLDURLSystem({ getNode, saveNode })
+
+  const updatedURL = await system.patch(url, patches)
+
+  // It's determenistic! 🤯
+  const expectedURL = 'ipld://bafyreiaeh5ftdg5qmvaxsj54dm25ja5kd5446hpst3zy3u7qcx42v54f5a/'
+
+  t.equal(updatedURL, expectedURL, 'Got expected result URL')
+
+  const resolved = await system.resolve(updatedURL + 'example')
+
+  const expected = {
+    goodbye: ['cruel', 'world']
+  }
+
+  t.deepEqual(resolved, expected, 'Got expected structure')
 })
 
 async function addSchema (dslString) {
@@ -179,4 +243,11 @@ async function put (data) {
 async function getNode (cid) {
   const { value } = await node.dag.get(cid)
   return value
+}
+
+async function saveNode (data, { encoding = 'dag-cbor', ...opts } = {}) {
+  return node.dag.put(data, {
+    storeCodec: encoding,
+    ...opts
+  })
 }

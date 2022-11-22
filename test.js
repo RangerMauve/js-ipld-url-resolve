@@ -89,7 +89,7 @@ test('Apply schema for sub-nodes during pathing', async (t) => {
   const expected = {
     region: 'Cyberspace'
   }
-  const url = `ipld://${dataCID}/Goodbye?schema=${schemaCID}&type=Example`
+  const url = `ipld://${dataCID}/Goodbye/?schema=${schemaCID}&type=Example`
 
   const resolved = await system.resolve(url)
 
@@ -114,7 +114,7 @@ test('Traverse over links', async (t) => {
 
   t.deepEqual(resolved1, expected1, 'Resolved data with CID present')
 
-  const subURL = rootURL + 'example'
+  const subURL = rootURL + 'example/'
 
   const expected2 = 'Hello, World?'
   const resolved2 = await system.resolve(subURL)
@@ -141,7 +141,7 @@ test('Preserve schema type when traversing Links', async (t) => {
   const expected = {
     region: 'Cyberspace'
   }
-  const url = `ipld://${cid2}/Goodbye?schema=${schemaCID}&type=Example`
+  const url = `ipld://${cid2}/Goodbye/?schema=${schemaCID}&type=Example`
 
   const resolved = await system.resolve(url)
 
@@ -218,7 +218,7 @@ test('Patch accross Link boundry', async (t) => {
 
   t.equal(updatedURL, expectedURL, 'Got expected result URL')
 
-  const resolved = await system.resolve(updatedURL + 'example')
+  const resolved = await system.resolve(updatedURL + 'example/')
 
   const expected = {
     goodbye: ['cruel', 'world']

@@ -23,7 +23,7 @@ export class IPLDURLSystem {
     this.cidBases = cidBases
   }
 
-  async resolve (url, { resolveFinalCID = true } = {}) {
+  async resolve (url, { resolveFinalCID = new URL(url).pathname.endsWith('/') } = {}) {
     const { hostname: root, segments, searchParams } = new IPLDURL(url)
 
     const cid = CID.parse(root, this.cidBases).toV1()

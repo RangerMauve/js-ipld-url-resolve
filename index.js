@@ -1,10 +1,12 @@
-import { IPLDURL } from 'js-ipld-url'
 import { create as createTyped } from '@ipld/schema/typed.js'
-import { toDSL } from '@ipld/schema/to-dsl.js'
-import { CID } from 'multiformats/cid'
 import printify from '@ipld/printify'
+import { toDSL } from '@ipld/schema/to-dsl.js'
+
+import { CID } from 'multiformats/cid'
 import { base32 } from 'multiformats/bases/base32'
 import { base36 } from 'multiformats/bases/base36'
+
+import { IPLDURL } from './ipldurl.js'
 
 export const DEFAULT_CID_BASES = base32.decoder.or(base36.decoder)
 

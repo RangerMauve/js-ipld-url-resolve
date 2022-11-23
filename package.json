@@ -39,13 +39,12 @@
   },
   "homepage": "https://github.com/RangerMauve/js-ipld-url-resolve#readme",
   "dependencies": {
-    "@ipld/printify": "^0.1.0",
-    "@ipld/schema": "^4.1.0",
-    "js-ipld-url": "^1.0.2",
-    "multiformats": "^9.7.1"
+    "@ipld/printify": "^0.1.1",
+    "@ipld/schema": "^4.1.1",
+    "multiformats": "^10.0.2"
   },
   "devDependencies": {
-    "ipfs-core": "^0.16.0",
+    "ipfs-core": "^0.17.0",
     "rollup": "^2.79.0",
     "standard": "^17.0.0",
     "tape": "^5.6.0"

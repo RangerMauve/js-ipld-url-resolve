@@ -8,6 +8,10 @@ import { base36 } from 'multiformats/bases/base36'
 
 import { IPLDURL } from './ipldurl.js'
 
+export { IPLDURL } from './ipldurl.js'
+
+export const SUBSTRATE = Symbol.for('ipld.substrate')
+
 export const DEFAULT_CID_BASES = base32.decoder.or(base36.decoder)
 
 export class IPLDURLSystem {
@@ -25,29 +29,22 @@ export class IPLDURLSystem {
     this.cidBases = cidBases
   }
 
-  async resolve (url, { resolveFinalCID = new URL(url).pathname.endsWith('/') } = {}) {
-    const { hostname: root, segments, searchParams } = new IPLDURL(url)
+  async resolve (url, { resolveFinalCID = true } = {}) {
+    const {
+      cid,
+      segments,
+      parameters: initialParameters,
+      resolveFinal
+    } = new IPLDURL(url)
 
-    const cid = CID.parse(root, this.cidBases).toV1()
     let data = await this.getNode(cid)
 
-    const initialParameters = {}
-    let shouldProcessRoot = false
-    if (searchParams.has('schema')) {
-      shouldProcessRoot = true
-      initialParameters.schema = searchParams.get('schema')
-      initialParameters.type = searchParams.get('type')
-    }
-    if (searchParams.has('adl')) {
-      // TODO Should other parameters be passed to the ADL function?
-      shouldProcessRoot = true
-      initialParameters.adl = searchParams.get('adl')
-    }
-    if (shouldProcessRoot) {
+    if (initialParameters) {
       data = await this.#applyParameters(data, initialParameters)
     }
 
-    let lastCID = root
+    let lastCID = cid
+
     for (const { name, parameters } of segments) {
       // This does enables ADLs to return promises for properties
       data = await data[name]
@@ -60,15 +57,19 @@ export class IPLDURLSystem {
       data = await this.#applyParameters(data, parameters)
     }
 
-    if (!resolveFinalCID && lastCID) {
+    if (lastCID && (!resolveFinal && !resolveFinalCID)) {
       return lastCID
     }
 
     return data
   }
 
-  async #applyParameters (origin, { schema, adl, ...parameters }) {
+  async #applyParameters (origin, parameters) {
     let data = origin
+
+    const schema = parameters.get('schema')
+    const type = parameters.get('type')
+    const adl = parameters.get('adl')
 
     const asCID = CID.asCID(data)
     if (asCID) {
@@ -76,7 +77,7 @@ export class IPLDURLSystem {
     }
 
     if (schema) {
-      data = await SchemaADL(data, { schema, ...parameters }, this)
+      data = await SchemaADL(data, { schema, type }, this)
     }
 
     if (adl) {
@@ -91,11 +92,21 @@ export class IPLDURLSystem {
   }
 
   async patch (url, patchset) {
-    // TODO: Throw error on invalid lenses
-    const { hostname: root, segments } = new IPLDURL(url)
+    const {
+      cid: root,
+      segments,
+      parameters: initialParameters
+    } = new IPLDURL(url)
 
     // Track root CID
-    let cid = CID.parse(root, this.cidBases).toV1()
+
+    let cid = root
+
+    // Resolve the Node the URL is pointing to
+    // Apply patches to it
+    // Patch in the node's substrate
+
+    const encoding = this.getCidEncoding(cid)
 
     for (const { op, path, value, from } of patchset) {
       const pathSegments = patchPathToSegments(path)
@@ -137,37 +148,54 @@ export class IPLDURLSystem {
         throw new Error(`Invalid patch operation type ${op}`)
       }
 
-      cid = await this.#applyPatch(cid, allSegments, operation)
+      const node = await this.getNode(cid)
+      const wrapped = await this.#applyParameters(node, initialParameters)
+      const modified = await this.#applyPatch(wrapped, allSegments, operation)
+      let toSave = modified
+      if (modified[SUBSTRATE]) {
+        toSave = toSave[SUBSTRATE]()
+      }
+      cid = await this.saveNode(toSave, { encoding })
     }
 
     // After all the modifications have occured, print the resulting URL
     const finalURL = new IPLDURL(url)
-    finalURL.hostname = cid.toV1().toString()
+    finalURL.cid = cid
 
     return finalURL.href
   }
 
   async #applyPatch (node, segments, operation) {
     // TODO apply / unapply lenses over nodes
-    const { name } = segments[0]
+    const { name, parameters } = segments[0]
     const asCID = CID.asCID(node)
 
     if (!segments.length) {
       // TODO: How do we account for this?
     }
 
+    let data = node
+
     if (segments.length === 1) {
       if (asCID) {
-        const data = await this.getNode(asCID)
-
-        const modified = operation(data, name)
-
-        const encoding = this.getCidEncoding(asCID)
-        const newCID = await this.saveNode(modified, { encoding })
-
-        return newCID
+        data = await this.getNode(asCID)
+        data = await this.applyParameters(data, parameters)
       }
-      return operation(node, name)
+
+      const modified = operation(data, name)
+
+      if (!asCID) {
+        return modified
+      }
+      const encoding = this.getCidEncoding(asCID)
+
+      let toSave = modified
+      if (modified[SUBSTRATE]) {
+        toSave = toSave[SUBSTRATE]()
+      }
+      const newCID = await this.saveNode(toSave, { encoding })
+
+      return newCID
     } else {
       const [{ name }, ...remainder] = segments
 
@@ -177,19 +205,40 @@ export class IPLDURLSystem {
 
         const existing = data[name]
 
-        const updated = await this.#applyPatch(existing, remainder, operation)
+        const wrapped = await this.#applyParameters(existing, parameters)
+        const updated = await this.#applyPatch(wrapped, remainder, operation)
         const modified = { ...data, [name]: updated }
 
         const encoding = this.getCidEncoding(asCID)
-        const newCID = await this.saveNode(modified, { encoding })
+
+        let toSave = modified
+        if (modified[SUBSTRATE]) {
+          toSave = await toSave[SUBSTRATE]()
+        }
+        const newCID = await this.saveNode(toSave, { encoding })
         return newCID
       }
+
       if (!(name in node)) throw new Error(`Path ${name} not found in node`)
+
       const existing = node[name]
-      const updated = await this.#applyPatch(existing, remainder, operation)
-      return {
-        ...node,
-        [name]: updated
+
+      const wrapped = await this.#applyParameters(existing, parameters)
+      const updated = await this.#applyPatch(wrapped, remainder, operation)
+      let final = updated
+      if (updated[SUBSTRATE]) {
+        final = await final[SUBSTRATE]()
+      }
+
+      if (Array.isArray(node)) {
+        const copy = node.slice()
+        copy[name] = final
+        return copy
+      } else {
+        return {
+          ...node,
+          [name]: final
+        }
       }
     }
   }
@@ -230,7 +279,7 @@ function makeAdd (value) {
 
 function makeRemove () {
   return (node, name) => {
-    if (!(name in node)) throw new Error(`Cannot remove. Missing property ${name} in value`)
+    if (!(name in node)) throw new Error(`Cannot remove. Missing property ${name} in value ${node}`)
     if (Array.isArray(node)) {
       const copy = node.slice()
       const index = parseInt(name, 10)
@@ -244,7 +293,7 @@ function makeRemove () {
 }
 function makeReplace (value) {
   return (node, name) => {
-    if (!(name in node)) throw new Error(`Cannot replace. Missing property ${name} in value`)
+    if (!(name in node)) throw new Error(`Cannot replace. Missing property ${name} in value ${node}`)
     if (Array.isArray(node)) {
       const copy = node.slice()
       const index = parseInt(name, 10)
@@ -279,6 +328,10 @@ export async function SchemaADL (node, { schema, type }, system) {
 function makeTyped (node, schemaDMT, type, system) {
   const typedSchema = createTyped(schemaDMT, type)
   const converted = typedSchema.toTyped(node)
+
+  converted[SUBSTRATE] = function getSubstrate () {
+    return typedSchema.toRepresentation(this)
+  }
 
   if (!converted) {
     const dataView = printify(node)

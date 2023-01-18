@@ -16,8 +16,8 @@ Resolver for IPLD URLs based on the js-IPFS DAG API. supports advanced features 
 - ADL Registry for `schema` parameter to convert nodes
 - Patch support
 	- [x] Over plain nodes
-	- [ ] Over schema'd nodes
-	- [ ] Over ADLs
+	- [x] Over schema'd nodes
+	- [x] Over ADLs
 
 ## API
 

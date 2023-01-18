@@ -227,7 +227,7 @@ test('Patch accross Link boundry', async (t) => {
   t.deepEqual(resolved, expected, 'Got expected structure')
 })
 
-test.only('Patch over schema', async (t) => {
+test('Patch over schema', async (t) => {
   const system = new IPLDURLSystem({ getNode, saveNode })
 
   const schemaCID = await addSchema(`
@@ -274,7 +274,40 @@ test.only('Patch over schema', async (t) => {
   t.deepEqual(resolvedRaw, expectedRaw, 'Got expected raw structure')
 })
 
-test.skip('Patch over schema with link')
+test.only('Patch over schema with link', async (t) => {
+  const system = new IPLDURLSystem({ getNode, saveNode })
+
+  const schemaCID = await addSchema(`
+    type Example struct {
+      Hello String
+      Goodbye &NestedExample
+    } representation tuple
+    type NestedExample struct {
+      region String
+    } representation tuple
+  `)
+
+  const cid1 = await put(['Cyberspace'])
+  const cid2 = await put(['Hello', cid1])
+
+  const patches = [
+    { op: 'replace', path: '/Goodbye/region', value: 'Cruel World' }
+  ]
+
+  const url = `ipld://${cid2};schema=${schemaCID};type=Example/`
+
+  const updatedURL = await system.patch(url, patches)
+
+  const expected = {
+    region: 'Cruel World'
+  }
+
+  const changedValueURL = new URL('Goodbye/',updatedURL)
+
+  const resolved = await system.resolve(changedValueURL)
+
+  t.deepEqual(resolved, expected, 'Got expected data after patching')
+})
 
 test.skip('Patch over ADL')
 

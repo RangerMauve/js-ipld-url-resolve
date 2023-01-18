@@ -10,11 +10,18 @@ import { IPLDURL } from './ipldurl.js'
 
 export { IPLDURL } from './ipldurl.js'
 
+// Use as method to get the "raw" form of a node that's been wrapped with an ADL
 export const SUBSTRATE = Symbol.for('ipld.substrate')
+
+// Use as a method to detect if a given CID should be wrapped with an ADL
+export const ADD_LENS = Symbol.for('ipld.add_lens')
 
 export const DEFAULT_CID_BASES = base32.decoder.or(base36.decoder)
 
 export class IPLDURLSystem {
+  #getNode = null
+  #saveNode = null
+
   constructor ({
     getNode,
     saveNode,
@@ -23,10 +30,22 @@ export class IPLDURLSystem {
   }) {
     if (!getNode) throw new TypeError('Must provide a getNode function')
     if (!saveNode) throw new TypeError('Must provide a saveNode function')
-    this.getNode = getNode
-    this.saveNode = saveNode
+    this.#getNode = getNode
+    this.#saveNode = saveNode
     this.adls = adls
     this.cidBases = cidBases
+  }
+
+  async getNode (cid) {
+    const node = await this.#getNode(cid)
+    if (cid[ADD_LENS]) {
+      return cid[ADD_LENS](node)
+    }
+    return node
+  }
+
+  async saveNode (...args) {
+    return this.#saveNode(...args)
   }
 
   async resolve (url, { resolveFinalCID = true } = {}) {
@@ -47,7 +66,7 @@ export class IPLDURLSystem {
 
     for (const { name, parameters } of segments) {
       // This does enables ADLs to return promises for properties
-      data = await data[name]
+      data = data[name]
       lastCID = null
       const asCID = CID.asCID(data)
       if (asCID) {
@@ -66,6 +85,9 @@ export class IPLDURLSystem {
 
   async #applyParameters (origin, parameters) {
     let data = origin
+
+    // If there's no parameters, there's nothing to do
+    if (!parameters) return data
 
     const schema = parameters.get('schema')
     const type = parameters.get('type')
@@ -149,8 +171,11 @@ export class IPLDURLSystem {
       }
 
       const node = await this.getNode(cid)
+
       const wrapped = await this.#applyParameters(node, initialParameters)
+
       const modified = await this.#applyPatch(wrapped, allSegments, operation)
+
       let toSave = modified
       if (modified[SUBSTRATE]) {
         toSave = toSave[SUBSTRATE]()
@@ -179,7 +204,7 @@ export class IPLDURLSystem {
     if (segments.length === 1) {
       if (asCID) {
         data = await this.getNode(asCID)
-        data = await this.applyParameters(data, parameters)
+        data = await this.#applyParameters(data, parameters)
       }
 
       const modified = operation(data, name)
@@ -254,7 +279,8 @@ export class IPLDURLSystem {
 function makeEqual (value) {
   return (node, name) => {
     // TODO: Account for deep equals of arrays/links/objects
-    if (node[name] !== value) throw new Error(`Test failed, ${name} expected to be ${value}, instead got ${node[name]}`)
+    const currentValue = node[name]
+    if (currentValue !== value) throw new Error(`Test failed, ${name} expected to be ${value}, instead got ${node[name]}`)
     return node
   }
 }
@@ -330,7 +356,8 @@ function makeTyped (node, schemaDMT, type, system) {
   const converted = typedSchema.toTyped(node)
 
   converted[SUBSTRATE] = function getSubstrate () {
-    return typedSchema.toRepresentation(this)
+    const rawForm = typedSchema.toRepresentation(this)
+    return rawForm
   }
 
   if (!converted) {
@@ -351,9 +378,12 @@ function makeTyped (node, schemaDMT, type, system) {
         if (!expectedType) return value
         const asCID = CID.asCID(value)
         if (!asCID) return value
-        return system.getNode(asCID).then((resolved) => {
-          return makeTyped(resolved, schemaDMT, expectedType, system)
-        })
+
+        asCID[ADD_LENS] = (node) => {
+          return makeTyped(node, schemaDMT, expectedType, system)
+        }
+
+        return asCID
       }
     })
     return trapped
@@ -369,9 +399,12 @@ function makeTyped (node, schemaDMT, type, system) {
           const value = target[property]
           const asCID = CID.asCID(value)
           if (!asCID) return value
-          return system.getNode(asCID).then((resolved) => {
-            return makeTyped(resolved, schemaDMT, expectedType, system)
-          })
+
+          asCID[ADD_LENS] = (node) => {
+            return makeTyped(node, schemaDMT, expectedType, system)
+          }
+
+          return asCID
         }
       })
       return trapped
@@ -388,9 +421,10 @@ function makeTyped (node, schemaDMT, type, system) {
           const value = target[property]
           const asCID = CID.asCID(value)
           if (!asCID) return value
-          return system.getNode(asCID).then((resolved) => {
-            return makeTyped(resolved, schemaDMT, expectedType, system)
-          })
+
+          asCID[ADD_LENS] = (node) => {
+            return makeTyped(node, schemaDMT, expectedType, system)
+          }
         }
       })
       return trapped

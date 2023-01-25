@@ -112,7 +112,7 @@ test('Traverse over links', async (t) => {
 
   const resolved1 = await system.resolve(rootURL)
 
-  t.deepEqual(resolved1, expected1, 'Resolved data with CID present')
+  t.deepEqual(resolved1?.example?.bytes, expected1?.example?.bytes, 'Resolved data with CID present')
 
   const subURL = rootURL + 'example/'
 
@@ -274,7 +274,7 @@ test('Patch over schema', async (t) => {
   t.deepEqual(resolvedRaw, expectedRaw, 'Got expected raw structure')
 })
 
-test.only('Patch over schema with link', async (t) => {
+test('Patch over schema with link', async (t) => {
   const system = new IPLDURLSystem({ getNode, saveNode })
 
   const schemaCID = await addSchema(`

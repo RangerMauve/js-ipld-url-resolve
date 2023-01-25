@@ -19,6 +19,7 @@
   },
   "files": [
     "./index.js",
+    "./ipldurl.js",
     "./index.cjs",
     "./README.md",
     "./LICENSE"
